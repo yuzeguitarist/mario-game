@@ -1,0 +1,12 @@
+.venv/
+**/.venv/
+
+mario_ai_dropin/models/
+mario_ai_dropin/models/**
+**/mario_ai_dropin/models/
+**/mario_ai_dropin/models/**
+/mario_ai_dropin/
+
+# macOS junk
+.DS_Store
+**/.DS_Store
