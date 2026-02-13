@@ -1331,6 +1331,14 @@ class Enemy {
     return true;
   }
 
+  canDamageMario() {
+    return true;
+  }
+
+  canBeHitByProjectiles() {
+    return true;
+  }
+
     updatePhysics(level) {
       this.vy += GRAVITY;
       if (this.vy > MAX_FALL) this.vy = MAX_FALL;
@@ -1546,21 +1554,30 @@ class Koopa extends Enemy {
 
 class PiranhaPlant extends Enemy {
   constructor(x, pipeTopY) {
-    super(x, pipeTopY - 4);
+    super(x, pipeTopY + 12);
     this.w = 12;
     this.h = 20;
     this.vx = 0;
     this.vy = 0;
     this.noSpawnSnap = true;
-    this.hiddenY = pipeTopY - 4;
-    this.exposedY = pipeTopY - this.h + 1;
+    this.pipeTopY = pipeTopY;
+    this.hiddenY = pipeTopY + 12;
+    this.exposedY = pipeTopY - 15;
     this.y = this.hiddenY;
     this.state = 'waitHidden';
-    this.stateTimer = 40;
+    this.stateTimer = 36;
   }
 
   canBeStomped() {
     return false;
+  }
+
+  canDamageMario() {
+    return this.y <= this.pipeTopY - 2;
+  }
+
+  canBeHitByProjectiles() {
+    return this.y <= this.pipeTopY + 1;
   }
 
   update() {
@@ -1581,7 +1598,7 @@ class PiranhaPlant extends Enemy {
       if (this.y <= this.exposedY) {
         this.y = this.exposedY;
         this.state = 'waitTop';
-        this.stateTimer = 50;
+        this.stateTimer = 46;
       }
       return;
     }
@@ -1597,7 +1614,7 @@ class PiranhaPlant extends Enemy {
       if (this.y >= this.hiddenY) {
         this.y = this.hiddenY;
         this.state = 'waitHidden';
-        this.stateTimer = 35;
+        this.stateTimer = 32;
       }
     }
   }
@@ -1610,16 +1627,45 @@ class PiranhaPlant extends Enemy {
     if (!this.active || !this.alive) return;
     const drawX = Math.round(this.x - cameraX);
     const drawY = Math.round(this.y);
+    const bite = ((Math.floor(Date.now() / 180) + Math.floor(this.x / 16)) % 2) ? 1 : 0;
 
-    ctx.fillStyle = '#0c8f0c';
-    ctx.fillRect(drawX + 2, drawY + 7, 8, 13);
-    ctx.fillStyle = '#d6453a';
-    ctx.fillRect(drawX + 1, drawY, 10, 10);
+    // Clip to the area above pipe lip so hidden state looks natural.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, VIEW_W, this.pipeTopY + 1);
+    ctx.clip();
+
+    // Stem
+    const stemTop = drawY + 9;
+    const stemHeight = Math.max(0, this.pipeTopY - stemTop + 1);
+    if (stemHeight > 0) {
+      ctx.fillStyle = '#0b8a0b';
+      ctx.fillRect(drawX + 4, stemTop, 4, stemHeight);
+      ctx.fillStyle = '#15b315';
+      ctx.fillRect(drawX + 5, stemTop, 2, stemHeight);
+    }
+
+    // Head
+    ctx.fillStyle = '#cf3b33';
+    ctx.fillRect(drawX + 1, drawY + 1, 10, 9);
+    ctx.fillStyle = '#f7f7f7';
+    ctx.fillRect(drawX + 2, drawY + 3, 2, 2);
+    ctx.fillRect(drawX + 8, drawY + 3, 2, 2);
+
+    // Mouth + teeth
+    ctx.fillStyle = '#1b0707';
+    ctx.fillRect(drawX + 2, drawY + 7 + bite, 8, 2);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(drawX + 2, drawY + 2, 2, 2);
-    ctx.fillRect(drawX + 8, drawY + 2, 2, 2);
-    ctx.fillStyle = '#1a0000';
-    ctx.fillRect(drawX + 2, drawY + 7, 8, 2);
+    ctx.fillRect(drawX + 2, drawY + 7, 1, 1);
+    ctx.fillRect(drawX + 4, drawY + 7, 1, 1);
+    ctx.fillRect(drawX + 7, drawY + 7, 1, 1);
+    ctx.fillRect(drawX + 9, drawY + 7, 1, 1);
+
+    // Jaw
+    ctx.fillStyle = '#b5302a';
+    ctx.fillRect(drawX + 2, drawY + 9 + bite, 8, 2);
+
+    ctx.restore();
   }
 }
 
@@ -2197,8 +2243,10 @@ function createLevel3() {
 
   // High platforms section
   for (let x = 129; x <= 131; x++) level[7][x] = 9;
-  for (let x = 134; x <= 136; x++) level[5][x] = 9;
-  level[5][135] = 3;
+  level[6][132] = 9; // step block to make upper ? reachable
+  level[6][133] = 9;
+  for (let x = 134; x <= 136; x++) level[6][x] = 9;
+  level[6][135] = 3;
   for (let x = 139; x <= 141; x++) level[7][x] = 9;
 
   // Staircase platforms descending
@@ -2304,6 +2352,8 @@ function updateFireballs() {
     // Hit enemies
     for (const e of enemies) {
       if (!e.alive || !e.active) continue;
+      const canHit = typeof e.canBeHitByProjectiles === 'function' ? e.canBeHitByProjectiles() : true;
+      if (!canHit) continue;
       if (fb.x > e.x && fb.x < e.x + e.w && fb.y > e.y && fb.y < e.y + e.h) {
         e.alive = false;
         fb.alive = false;
@@ -2464,6 +2514,8 @@ function shootLaser() {
   for (const e of enemies) {
     if (!e.alive || !e.active) continue;
     if (e instanceof Goomba && e.flat) continue;
+    const canHit = typeof e.canBeHitByProjectiles === 'function' ? e.canBeHitByProjectiles() : true;
+    if (!canHit) continue;
     const ey = e.y + e.h / 2;
     const laserY = laserBeam.y;
     if (Math.abs(ey - laserY) < 16) {
@@ -2589,6 +2641,8 @@ function checkMarioEnemyCollisions() {
     if (!e.alive || !e.active) continue;
     // Skip flat (already stomped) goombas
     if (e instanceof Goomba && e.flat) continue;
+    const canDamage = typeof e.canDamageMario === 'function' ? e.canDamageMario() : true;
+    if (!canDamage) continue;
 
     if (e instanceof Koopa && e.shell && !e.shellMoving) {
       // Can kick stationary shell
